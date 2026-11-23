@@ -1,49 +1,228 @@
-# IR Thermal Vision
+<div align="center">
 
-Live MLX90640 thermal imaging from an **ESP32 DevKit V1** (recommended) or **ESP8266 NodeMCU** to a Windows/Linux/macOS computer over Wi-Fi. The computer converts each 32 × 24 temperature frame into a false-colour MJPEG stream using Python, Flask and OpenCV.
+# 🌡️ IR Thermal Vision
 
-> **This project requires an MLX90640 thermal array.** An MLX90614 / DFRobot SEN0206 is a single-point infrared thermometer and cannot produce a thermal image. Do not buy the SEN0206 for this project.
+**Live MLX90640 thermal imaging over Wi-Fi: ESP32 / ESP8266 → Python → your browser**
 
-## Features
+![Python](https://img.shields.io/badge/Python-3.10%2B-3776AB?logo=python&logoColor=white)
+![Flask](https://img.shields.io/badge/Flask-Backend-000000?logo=flask&logoColor=white)
+![OpenCV](https://img.shields.io/badge/OpenCV-Colour%20Mapping-5C3EE8?logo=opencv&logoColor=white)
+![Arduino](https://img.shields.io/badge/Arduino-IDE%202.x-00979D?logo=arduino&logoColor=white)
+![ESP32](https://img.shields.io/badge/ESP32-Recommended-E7352C?logo=espressif&logoColor=white)
+![License](https://img.shields.io/badge/License-MIT-green)
 
-- Live browser-based false-colour thermal stream (no OLED required)
-- ESP32 and ESP8266 firmware in one Arduino sketch, selected at compile time
-- Wi-Fi frame transfer using a compact binary protocol
-- Live minimum, average and maximum temperature readings
-- Hottest-pixel crosshair and stale-connection indicator
-- Local dashboard; no cloud service or API key required
+*An ESP board reads 32 × 24 temperature frames from an MLX90640 sensor, sends them over Wi-Fi, and a Python server turns them into a false-colour MJPEG stream with live temperature readouts.*
 
-## Important limitations
+</div>
 
-- The MLX90640 is a **32 × 24 pixel** thermal imager. The dashboard enlarges the image with interpolation for viewing; it does not create extra thermal detail.
-- The ESP32 firmware is the recommended option. The ESP8266 has less RAM and processing headroom; its firmware is deliberately configured for a slower sensor refresh rate and the stream may be slow or unreliable on some ESP8266 boards.
-- The displayed crosshair identifies the hottest pixel. This starter project does **not** identify people or provide reliable human detection / bounding boxes.
-- This is a thermal video-like stream made from successive sensor frames, not an ordinary RGB camera stream. The MLX90640 refresh rate and I²C transfer speed limit the frame rate.
-- Temperature readings depend on sensor calibration, emissivity, distance, field of view and the target surface. Do not use this project as a certified medical or safety instrument.
+---
 
-## Hardware
+> [!WARNING]
+> **This project requires an MLX90640 thermal array.**
+> The MLX90614 / DFRobot SEN0206 is a *single-point* infrared thermometer and **cannot** produce a thermal image. Do not buy the SEN0206 for this project.
 
-1. ESP32 DevKit V1 **recommended**, or ESP8266 NodeMCU
-2. MLX90640 32 × 24 thermal camera breakout (I²C, address normally `0x33`)
-3. USB cable and computer
-4. Jumper wires
+## 📑 Table of Contents
+
+- [Features](#-features)
+- [How It Works](#-how-it-works)
+- [Hardware](#-hardware)
+- [Wiring Diagram](#-wiring-diagram)
+- [Repository Structure](#-repository-structure)
+- [Setup](#-setup)
+  - [1. Install Arduino IDE and libraries](#1-install-arduino-ide-and-libraries)
+  - [2. Start the dashboard](#2-start-the-computer-dashboard-first)
+  - [3. Configure and upload firmware](#3-configure-and-upload-the-firmware)
+  - [4. View the live stream](#4-view-the-live-thermal-stream)
+- [Data Protocol](#-data-protocol)
+- [Limitations](#-important-limitations)
+- [Troubleshooting](#-troubleshooting)
+- [Publishing to GitHub](#-publishing-to-github)
+- [License](#-license)
+- [References](#-references)
+
+---
+
+## ✨ Features
+
+| | |
+|---|---|
+| 🎨 **Live false-colour stream** | Browser-based thermal view, no OLED required |
+| 🔀 **ESP32 + ESP8266** | One Arduino sketch, selected at compile time |
+| 📡 **Compact Wi-Fi protocol** | Fixed 1,536-byte binary frames over HTTP |
+| 📊 **Live statistics** | Minimum, average and maximum temperature |
+| 🎯 **Hottest-pixel crosshair** | Plus a stale-connection indicator |
+| 🔒 **Fully local** | No cloud service or API key required |
+
+---
+
+## 🔄 How It Works
+
+### System architecture
+
+```mermaid
+flowchart LR
+    A["🌡️ MLX90640<br/>32 × 24 thermal array"] -- "I²C (0x33)" --> B["📟 ESP32 / ESP8266<br/>Reads frames"]
+    B -- "Wi-Fi · HTTP POST<br/>1,536-byte frame" --> C["🐍 Flask server<br/>/api/frame"]
+    C --> D["🖼️ OpenCV<br/>Interpolate + colour map"]
+    D -- "MJPEG /video_feed" --> E["🌐 Browser dashboard<br/>127.0.0.1:5000"]
+
+    style A fill:#fde68a,stroke:#b45309,color:#000
+    style B fill:#bfdbfe,stroke:#1d4ed8,color:#000
+    style C fill:#bbf7d0,stroke:#15803d,color:#000
+    style D fill:#e9d5ff,stroke:#7e22ce,color:#000
+    style E fill:#fecaca,stroke:#b91c1c,color:#000
+```
+
+### Frame lifecycle
+
+```mermaid
+sequenceDiagram
+    participant S as MLX90640
+    participant E as ESP board
+    participant P as Flask server
+    participant B as Browser
+
+    loop Every sensor frame
+        E->>S: Request subpages over I²C
+        S-->>E: 768 temperatures (°C)
+        E->>E: Convert to int16 (°C × 100)
+        E->>P: POST /api/frame (1,536 bytes)
+        P->>P: Validate size, update statistics
+        P-->>E: HTTP 200
+    end
+    B->>P: GET /video_feed
+    P-->>B: MJPEG false-colour stream
+```
+
+---
+
+## 🧰 Hardware
+
+| # | Component | Notes |
+|---|---|---|
+| 1 | **ESP32 DevKit V1** *(recommended)* or ESP8266 NodeMCU | ESP8266 is experimental and slower |
+| 2 | **MLX90640** 32 × 24 thermal camera breakout | I²C, address normally `0x33` |
+| 3 | USB cable and a computer | Windows, Linux or macOS |
+| 4 | Jumper wires | Keep them short |
 
 No OLED, display, buzzer or separate camera is required.
 
-### Wiring
+---
 
-Use the breakout board's pin labels. Power the breakout according to its own documentation; use 3.3 V logic with ESP boards. If the board has a `VIN` pin with an onboard regulator, follow its specified input range. Never connect a 5 V I²C signal to an ESP GPIO.
+## 🔌 Wiring Diagram
 
-| MLX90640 breakout | ESP32 DevKit V1 | ESP8266 NodeMCU |
-|---|---|---|
-| VIN / 3V3 | 3V3 (or breakout-specified VIN) | 3V3 (or breakout-specified VIN) |
-| GND | GND | GND |
-| SDA | GPIO 21 | D2 / GPIO 4 |
-| SCL | GPIO 22 | D1 / GPIO 5 |
+> [!CAUTION]
+> Use **3.3 V logic** with ESP boards. Never connect a 5 V I²C signal to an ESP GPIO. Power the breakout according to its own documentation; if it has a `VIN` pin with an onboard regulator, follow its specified input range.
 
-Keep I²C wires short. If the sensor is not detected, check the breakout's power requirements, SDA/SCL orientation, common ground and I²C pull-ups. The firmware expects address `0x33`.
+### ESP32 DevKit V1 (recommended)
 
-## Repository structure
+```mermaid
+flowchart LR
+    subgraph SENSOR["MLX90640 breakout"]
+        direction TB
+        S1["VIN"]
+        S2["GND"]
+        S3["SDA"]
+        S4["SCL"]
+    end
+    subgraph ESP["ESP32 DevKit V1"]
+        direction TB
+        E1["3V3"]
+        E2["GND"]
+        E3["GPIO 21 (SDA)"]
+        E4["GPIO 22 (SCL)"]
+    end
+    S1 --- E1
+    S2 --- E2
+    S3 --- E3
+    S4 --- E4
+
+    linkStyle 0 stroke:#dc2626,stroke-width:3px
+    linkStyle 1 stroke:#374151,stroke-width:3px
+    linkStyle 2 stroke:#2563eb,stroke-width:3px
+    linkStyle 3 stroke:#d97706,stroke-width:3px
+```
+
+```text
+   MLX90640 breakout                ESP32 DevKit V1
+  ┌─────────────────┐              ┌──────────────────┐
+  │  VIN / 3V3  ●───┼── red ───────┼───● 3V3          │
+  │  GND        ●───┼── black ─────┼───● GND          │
+  │  SDA        ●───┼── blue ──────┼───● GPIO 21      │
+  │  SCL        ●───┼── yellow ────┼───● GPIO 22      │
+  └─────────────────┘              └──────────────────┘
+```
+
+### ESP8266 NodeMCU (experimental)
+
+```mermaid
+flowchart LR
+    subgraph SENSOR["MLX90640 breakout"]
+        direction TB
+        S1["VIN"]
+        S2["GND"]
+        S3["SDA"]
+        S4["SCL"]
+    end
+    subgraph ESP["ESP8266 NodeMCU"]
+        direction TB
+        E1["3V3"]
+        E2["GND"]
+        E3["D2 / GPIO 4 (SDA)"]
+        E4["D1 / GPIO 5 (SCL)"]
+    end
+    S1 --- E1
+    S2 --- E2
+    S3 --- E3
+    S4 --- E4
+
+    linkStyle 0 stroke:#dc2626,stroke-width:3px
+    linkStyle 1 stroke:#374151,stroke-width:3px
+    linkStyle 2 stroke:#2563eb,stroke-width:3px
+    linkStyle 3 stroke:#d97706,stroke-width:3px
+```
+
+```text
+   MLX90640 breakout                ESP8266 NodeMCU
+  ┌─────────────────┐              ┌──────────────────┐
+  │  VIN / 3V3  ●───┼── red ───────┼───● 3V3          │
+  │  GND        ●───┼── black ─────┼───● GND          │
+  │  SDA        ●───┼── blue ──────┼───● D2 (GPIO 4)  │
+  │  SCL        ●───┼── yellow ────┼───● D1 (GPIO 5)  │
+  └─────────────────┘              └──────────────────┘
+```
+
+### Pin reference
+
+| MLX90640 breakout | Wire colour (suggested) | ESP32 DevKit V1 | ESP8266 NodeMCU |
+|---|---|---|---|
+| VIN / 3V3 | 🔴 Red | 3V3 *(or breakout-specified VIN)* | 3V3 *(or breakout-specified VIN)* |
+| GND | ⚫ Black | GND | GND |
+| SDA | 🔵 Blue | GPIO 21 | D2 / GPIO 4 |
+| SCL | 🟡 Yellow | GPIO 22 | D1 / GPIO 5 |
+
+> [!TIP]
+> Keep I²C wires short. If the sensor is not detected, check the breakout's power requirements, SDA/SCL orientation, common ground and I²C pull-ups. The firmware expects address `0x33`.
+
+### Network layout
+
+```mermaid
+flowchart LR
+    subgraph LAN["Same Wi-Fi network / LAN"]
+        ESP["📟 ESP board<br/>(client)"]
+        PC["💻 Computer<br/>192.168.1.100:5000<br/>(server)"]
+    end
+    ROUTER(("📶 Wi-Fi router"))
+    ESP <--> ROUTER
+    PC <--> ROUTER
+    ESP -. "POST /api/frame" .-> PC
+```
+
+Both devices must be on the same LAN. Guest Wi-Fi / client isolation can block device-to-device traffic.
+
+---
+
+## 📁 Repository Structure
 
 ```text
 ir-thermal-vision/
@@ -60,14 +239,18 @@ ir-thermal-vision/
 └── README.md
 ```
 
-## 1. Install Arduino IDE and libraries
+---
 
-1. Install Arduino IDE 2.x.
+## 🚀 Setup
+
+### 1. Install Arduino IDE and libraries
+
+1. Install **Arduino IDE 2.x**.
 2. Open **Library Manager** and install:
    - `Adafruit MLX90640`
-   - `Adafruit BusIO` (usually installed as a dependency)
-3. For ESP32: install **esp32 by Espressif Systems** in Boards Manager.
-4. For ESP8266: add this Boards Manager URL in Preferences:
+   - `Adafruit BusIO` *(usually installed as a dependency)*
+3. **ESP32:** install **esp32 by Espressif Systems** in Boards Manager.
+4. **ESP8266:** add this URL under *Preferences → Additional Boards Manager URLs*:
 
    ```text
    https://arduino.esp8266.com/stable/package_esp8266com_index.json
@@ -75,11 +258,12 @@ ir-thermal-vision/
 
    Then install **esp8266 by ESP8266 Community** in Boards Manager.
 
-## 2. Start the computer dashboard first
+### 2. Start the computer dashboard first
 
-Install Python 3.10 or newer. Open a terminal in the `desktop` folder.
+Install **Python 3.10 or newer**, then open a terminal in the `desktop` folder.
 
-### Windows PowerShell
+<details open>
+<summary><b>🪟 Windows (PowerShell)</b></summary>
 
 ```powershell
 py -m venv .venv
@@ -96,7 +280,10 @@ Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
 .venv\Scripts\Activate.ps1
 ```
 
-### Linux / macOS
+</details>
+
+<details>
+<summary><b>🐧 Linux / 🍎 macOS</b></summary>
 
 ```bash
 python3 -m venv .venv
@@ -106,93 +293,126 @@ pip install -r requirements.txt
 python app.py
 ```
 
-The server listens on port `5000`. Keep this terminal open.
+</details>
 
-### Find your computer's local IPv4 address
+The server listens on port `5000`. **Keep this terminal open.**
 
-On Windows, run:
+#### Find your computer's local IPv4 address
 
-```powershell
-ipconfig
-```
+| OS | Command |
+|---|---|
+| Windows | `ipconfig` → *IPv4 Address* under the Wi-Fi adapter (e.g. `192.168.1.100`) |
+| Linux | `hostname -I` |
+| macOS | `ipconfig getifaddr en0` (typical Wi-Fi setup) |
 
-Find the **IPv4 Address** under the Wi-Fi adapter connected to the same network as the ESP board. Example: `192.168.1.100` (your address will be different).
+Open the dashboard on your computer at **<http://127.0.0.1:5000>**.
 
-On Linux, use `hostname -I`. On macOS, use `ipconfig getifaddr en0` for Wi-Fi in a typical setup.
+> [!NOTE]
+> If the ESP cannot reach the server, allow Python on **private networks** in Windows Firewall.
 
-Open the dashboard on your computer at:
+### 3. Configure and upload the firmware
 
-```text
-http://127.0.0.1:5000
-```
-
-If the ESP cannot reach the server, allow Python on private networks in Windows Firewall. Both devices must be on the same LAN; guest Wi-Fi/client isolation can block device-to-device traffic.
-
-## 3. Configure and upload the firmware
-
-Open:
-
-```text
-firmware/IR_Thermal_Vision/IR_Thermal_Vision.ino
-```
-
-Edit the three settings near the top:
+Open `firmware/IR_Thermal_Vision/IR_Thermal_Vision.ino` and edit the three settings near the top:
 
 ```cpp
-const char* WIFI_SSID = "YOUR_WIFI_NAME";
+const char* WIFI_SSID     = "YOUR_WIFI_NAME";
 const char* WIFI_PASSWORD = "YOUR_WIFI_PASSWORD";
-const char* FRAME_URL = "http://192.168.1.100:5000/api/frame";
+const char* FRAME_URL     = "http://192.168.1.100:5000/api/frame";
 ```
 
-Replace the Wi-Fi name, password and example IP with your own values. Keep the computer and ESP on the same Wi-Fi network. Do not commit real Wi-Fi credentials to a public GitHub repository; use placeholders before pushing.
+Replace the Wi-Fi name, password and example IP with your own values.
 
-### Upload to ESP32 DevKit V1 (recommended)
+> [!IMPORTANT]
+> Never commit real Wi-Fi credentials to a public repository. Use placeholders before pushing.
+
+<details open>
+<summary><b>Upload to ESP32 DevKit V1 (recommended)</b></summary>
 
 1. Connect the ESP32 by USB.
-2. Select **Tools → Board → ESP32 Arduino → ESP32 Dev Module** (or the exact DevKit board available).
+2. Select **Tools → Board → ESP32 Arduino → ESP32 Dev Module** (or your exact DevKit board).
 3. Select the correct COM port.
-4. Click Upload.
+4. Click **Upload**.
 5. Open Serial Monitor at `115200` baud.
 
-ESP32 pin mapping in the sketch: SDA `GPIO 21`, SCL `GPIO 22`. Sensor refresh is configured at `4` pages/second (about 2 complete frames/second, since an MLX90640 frame has two subpages).
+Pin mapping: SDA `GPIO 21`, SCL `GPIO 22`. Sensor refresh is set to `4` pages/second (about 2 complete frames/second, since an MLX90640 frame has two subpages).
 
-### Upload to ESP8266 NodeMCU (experimental / slower)
+</details>
+
+<details>
+<summary><b>Upload to ESP8266 NodeMCU (experimental / slower)</b></summary>
 
 1. Connect the NodeMCU by USB.
 2. Select **Tools → Board → ESP8266 Boards → NodeMCU 1.0 (ESP-12E Module)**.
 3. Select the correct COM port and upload.
 4. Open Serial Monitor at `115200` baud.
 
-ESP8266 pin mapping in the sketch: SDA `D2/GPIO4`, SCL `D1/GPIO5`. The firmware selects a lower sensor refresh rate to reduce load. If the MLX90640 library fails to initialize or the board resets due to memory pressure, use the ESP32 DevKit V1 instead.
+Pin mapping: SDA `D2/GPIO4`, SCL `D1/GPIO5`. The firmware uses a lower refresh rate to reduce load. If the library fails to initialise or the board resets from memory pressure, use the ESP32 DevKit V1 instead.
 
-## 4. View the live thermal stream
+</details>
+
+### 4. View the live thermal stream
 
 With the Python server running and the firmware uploaded:
 
 1. Open the Serial Monitor and wait for `Wi-Fi connected` and `MLX90640 initialized`.
 2. Confirm the ESP prints its IP address.
-3. Open `http://127.0.0.1:5000` in your computer browser.
-4. The dashboard should change from **WAITING FOR SENSOR** to **THERMAL SENSOR CONNECTED** after the first valid frame arrives.
+3. Open <http://127.0.0.1:5000> in your browser.
+4. The dashboard changes from **WAITING FOR SENSOR** to **THERMAL SENSOR CONNECTED** after the first valid frame.
 
-The thermal image is also available at `http://127.0.0.1:5000/video_feed` and server health at `http://127.0.0.1:5000/health`.
+| Endpoint | Purpose |
+|---|---|
+| `http://127.0.0.1:5000/` | Dashboard |
+| `http://127.0.0.1:5000/video_feed` | Raw thermal MJPEG stream |
+| `http://127.0.0.1:5000/health` | Server health |
+| `POST /api/frame` | Frame upload from the ESP |
 
-## Data protocol
+---
 
-The ESP sends an HTTP `POST` to `/api/frame` with `Content-Type: application/octet-stream`. The body is exactly 1,536 bytes: 768 signed 16-bit little-endian values, each representing Celsius × 100. `-32768` is reserved for an invalid pixel. The server checks the payload size before accepting it.
+## 📦 Data Protocol
 
-## Troubleshooting
+The ESP sends an HTTP `POST` to `/api/frame` with `Content-Type: application/octet-stream`.
+
+```text
+┌───────────────────────────────────────────────────────────────┐
+│ Body: exactly 1,536 bytes = 768 pixels × 2 bytes              │
+├───────────────────────────────────────────────────────────────┤
+│ Pixel 0 │ Pixel 1 │ Pixel 2 │  ...  │ Pixel 767               │
+│ int16 LE│ int16 LE│ int16 LE│       │ int16 LE                │
+└───────────────────────────────────────────────────────────────┘
+ Value = temperature in °C × 100       (example: 3650 → 36.50 °C)
+ -32768 = reserved for an invalid pixel
+ Layout: 32 columns × 24 rows
+```
+
+The server checks the payload size before accepting it.
+
+---
+
+## ⚠️ Important Limitations
+
+- **Resolution:** The MLX90640 is only **32 × 24 pixels**. The dashboard enlarges the image with interpolation; it does not create extra thermal detail.
+- **ESP8266:** Less RAM and processing headroom. Its firmware uses a slower refresh rate and may be unreliable on some boards. ESP32 is recommended.
+- **No person detection:** The crosshair marks the hottest pixel only. This starter project does **not** identify people or provide reliable human detection / bounding boxes.
+- **Frame rate:** The stream is made from successive sensor frames, not an RGB video feed. Sensor refresh rate and I²C speed limit the frame rate.
+- **Accuracy:** Readings depend on calibration, emissivity, distance, field of view and target surface. **Not a certified medical or safety instrument.**
+
+---
+
+## 🛠️ Troubleshooting
 
 | Symptom | Checks |
 |---|---|
-| `MLX90640 not found` | Confirm the part is MLX90640 (not MLX90614), I²C wiring, power, common GND and address `0x33`. |
-| ESP connects to Wi-Fi but no frames arrive | Check `FRAME_URL` uses the computer's LAN IP, port `5000`, same Wi-Fi, and firewall permissions. Do not use `localhost` in firmware. |
-| Dashboard says waiting for sensor | Check Serial Monitor for HTTP errors; open `http://127.0.0.1:5000/health` on the computer. |
-| `HTTP code: -1` | Server unreachable, wrong IP/port, firewall or Wi-Fi client isolation. |
-| Unstable frames / I²C errors | Shorten wires, check power and pull-ups; try the ESP32; keep the sensor refresh rate low. |
-| Image looks blocky | Expected: the sensor has only 32 × 24 pixels. Upscaling smooths display but cannot add detail. |
-| ESP8266 resets or fails to compile | Use ESP32 DevKit V1 for the full project; ESP8266 support is best-effort due to memory/CPU constraints. |
+| `MLX90640 not found` | Confirm the part is an MLX90640 (not MLX90614), I²C wiring, power, common GND and address `0x33`. |
+| Wi-Fi connects but no frames arrive | Check `FRAME_URL` uses the computer's LAN IP and port `5000`, same Wi-Fi, firewall permissions. Never use `localhost` in firmware. |
+| Dashboard says *waiting for sensor* | Check the Serial Monitor for HTTP errors; open `/health` on the computer. |
+| `HTTP code: -1` | Server unreachable: wrong IP/port, firewall, or Wi-Fi client isolation. |
+| Unstable frames / I²C errors | Shorten wires, check power and pull-ups, try the ESP32, keep the refresh rate low. |
+| Image looks blocky | Expected: only 32 × 24 pixels. Upscaling smooths the display but cannot add detail. |
+| ESP8266 resets or fails to compile | Use the ESP32 DevKit V1; ESP8266 support is best-effort due to memory/CPU limits. |
 
-## GitHub upload
+---
+
+## 📤 Publishing to GitHub
 
 From the project root:
 
@@ -205,14 +425,24 @@ git remote add origin https://github.com/YOUR-USERNAME/ir-thermal-vision.git
 git push -u origin main
 ```
 
-Create an empty repository on GitHub first and replace `YOUR-USERNAME` with your GitHub username. Do not upload Wi-Fi passwords, personal network details, virtual environments or compiled build files.
+Create an empty repository on GitHub first and replace `YOUR-USERNAME` with your username. Do not upload Wi-Fi passwords, personal network details, virtual environments or compiled build files.
 
-## License
+---
 
-MIT License. See [LICENSE](LICENSE).
+## 📄 License
 
-## References
+Released under the **MIT License**. See [LICENSE](LICENSE).
+
+## 🔗 References
 
 - [Adafruit MLX90640 Arduino library](https://github.com/adafruit/Adafruit_MLX90640)
 - [Adafruit MLX90640 API reference](https://adafruit.github.io/Adafruit_MLX90640/html/class_adafruit___m_l_x90640.html)
 - [ESP8266 Arduino core](https://github.com/esp8266/Arduino)
+
+---
+
+<div align="center">
+
+⭐ If this project helped you, consider giving the repository a star.
+
+</div>
